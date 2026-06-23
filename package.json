@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "MCP Server for deploying static HTML sites with Nginx reverse proxy",
   "type": "module",
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "build": "tsup",
     "dev": "tsx src/index.ts",

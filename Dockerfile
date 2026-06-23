@@ -1,12 +1,12 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
-RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 RUN pnpm install --frozen-lockfile
 
 FROM node:20-alpine AS build
 WORKDIR /app
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json pnpm-lock.yaml tsconfig.json tsup.config.ts ./
 COPY src ./src
