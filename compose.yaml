@@ -5,9 +5,9 @@ services:
     container_name: mcp-html-nginx
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3091:3091"
     environment:
-      MCP_PORT: "3000"
+      MCP_PORT: "3091"
       MCP_HOST: "0.0.0.0"
       MCP_BASE_URL: "https://yourdomain.com/sites"
       MCP_API_KEY: "change-me-to-a-long-random-secret"

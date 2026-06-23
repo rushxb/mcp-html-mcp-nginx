@@ -21,14 +21,18 @@ ENV NODE_ENV=production \
     MCP_DATA_DIR=/data \
     MCP_SITES_DIR=/sites
 
+RUN apk add --no-cache su-exec
+
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 RUN addgroup -S -g 10001 mcp && adduser -S -D -H -u 10001 -G mcp mcp \
   && mkdir -p /data /sites \
-  && chown -R mcp:mcp /app /data /sites
+  && chown -R mcp:mcp /app /data /sites \
+  && chmod +x /usr/local/bin/docker-entrypoint.sh
 
-USER mcp
 EXPOSE 3000
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "dist/index.js"]
