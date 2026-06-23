@@ -1,0 +1,12 @@
+node_modules
+dist
+data
+test_data
+server_*.log
+*.log
+.env
+.git
+.gitignore
+README.md
+test_mcp.cjs
+test-site

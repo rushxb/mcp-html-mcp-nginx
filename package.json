@@ -1,0 +1,38 @@
+{
+  "name": "mcp-html-nginx",
+  "version": "1.0.0",
+  "description": "MCP Server for deploying static HTML sites with Nginx reverse proxy",
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "html",
+    "nginx",
+    "deploy",
+    "static-site"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "adm-zip": "^0.5.17",
+    "express": "^5.2.1",
+    "lowdb": "^7.0.1",
+    "nanoid": "^5.1.15",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.0.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}

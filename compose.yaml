@@ -1,0 +1,21 @@
+services:
+  mcp-html-nginx:
+    build: .
+    image: mcp-html-nginx:latest
+    container_name: mcp-html-nginx
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      MCP_PORT: "3000"
+      MCP_HOST: "0.0.0.0"
+      MCP_BASE_URL: "https://yourdomain.com/sites"
+      MCP_API_KEY: "change-me-to-a-long-random-secret"
+      MCP_DEFAULT_TTL: "24h"
+      MCP_MAX_TTL: "30d"
+      MCP_CLEANUP_INTERVAL: "60000"
+      MCP_DATA_DIR: "/data"
+      MCP_SITES_DIR: "/sites"
+    volumes:
+      - ./data:/data
+      - /var/www/mcp-sites:/sites

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP 静态网页部署测试</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 flex items-center justify-center min-h-screen text-gray-800">
+    <div class="max-w-xl p-8 bg-white rounded-lg shadow-md border border-gray-100 text-center">
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 text-green-600 mb-4">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-900 mb-2">部署成功！</h1>
+        <p class="text-gray-600 mb-6">
+            恭喜，你的第一个静态网页已成功通过 MCP (Model Context Protocol) 服务部署到本地服务器中。
+        </p>
+        <div class="py-3 px-4 bg-gray-50 rounded border border-gray-200 text-sm font-mono text-gray-700">
+            Nginx 转发配置路径: /sites/{site-id}/
+        </div>
+        <div class="mt-8 text-xs text-gray-400">
+            由 MCP HTML 部署服务自动生成
+        </div>
+    </div>
+</body>
+</html>
