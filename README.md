@@ -113,10 +113,24 @@ docker compose ps
 docker compose logs -f
 ```
 
+如果日志出现 `EACCES: permission denied, open '/data/db.json'`，说明宿主机挂载的 `./data` 目录不可写。新版镜像会在启动时自动修正 `/data` 和 `/sites` 的权限；更新代码后请重新构建：
+
+```bash
+docker compose up -d --build
+```
+
+如果仍然失败，可以手动修复宿主机目录权限：
+
+```bash
+sudo mkdir -p ./data /var/www/mcp-sites
+sudo chown -R 10001:10001 ./data /var/www/mcp-sites
+docker compose restart
+```
+
 健康检查：
 
 ```bash
-curl http://127.0.0.1:3000/health
+curl http://127.0.0.1:3091/health
 ```
 
 #### 6. 配置 Nginx 一次性静态目录
@@ -127,9 +141,9 @@ server {
     listen 80;
     server_name yourdomain.com;
 
-    # MCP 协议入口，可选：如果您希望通过域名访问 MCP，而不是直接开放 3000 端口
+    # MCP 协议入口，可选：如果您希望通过域名访问 MCP，而不是直接开放 3091 端口
     location /mcp/ {
-        proxy_pass http://127.0.0.1:3000/;
+        proxy_pass http://127.0.0.1:3091/;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

@@ -11,40 +11,41 @@ export const deploySiteInputSchema = {
   name: z
     .string()
     .optional()
-    .describe("Human-readable site name. Auto-generated when omitted."),
+    .describe("Optional human-readable site name for later listing. Use the user's project/page name when available. Auto-generated when omitted."),
   files: z
     .array(
       z.object({
-        path: z.string().describe('Relative file path, e.g. "index.html" or "css/style.css"'),
-        content: z.string().describe("Base64-encoded file content"),
+        path: z.string().describe('Relative file path inside the deployed site, e.g. "index.html", "assets/app.js", or "css/style.css". Do not use absolute paths or ../ segments.'),
+        content: z.string().describe("Base64-encoded file bytes. Encode the exact file content as base64 before calling this tool."),
       })
     )
     .optional()
-    .describe("Upload individual files with base64 content. Mutually exclusive with zip_base64 and source_path."),
+    .describe("Upload one or more individual files. Best for LLM-generated pages. Must include index.html for browser-friendly access. Mutually exclusive with zip_base64 and source_path."),
   zip_base64: z
     .string()
     .optional()
-    .describe("Entire site as a base64-encoded ZIP archive. Mutually exclusive with files and source_path."),
+    .describe("Base64-encoded ZIP archive containing the entire static site. Use for multi-file folders. Mutually exclusive with files and source_path."),
   source_path: z
     .string()
     .optional()
-    .describe("Absolute path on the server where site files already exist. Mutually exclusive with files and zip_base64."),
+    .describe("Absolute path on the MCP server where site files already exist. Use only when the files are already on the server. Mutually exclusive with files and zip_base64."),
   ttl: z
     .union([z.number(), z.string()])
     .optional()
-    .describe("Survival time (TTL) for the site, e.g. 3600 (seconds), '30m', '12h', '7d', or 'never'. If omitted, the server default TTL is used when configured."),
+    .describe("Optional survival time for the deployed site. Examples: 3600 for seconds, '30m', '12h', '7d', or 'never'. If omitted, the server default TTL is used. If a maximum TTL is configured, values above it are rejected."),
 };
 
 // ---- Tool metadata (enterprise MCP best practices) ----
 
 export const deploySiteToolConfig = {
-  title: "Deploy Site",
+  title: "Deploy Static Website",
   description:
-    "Deploy a static HTML site. Accepts files via base64 file list, base64 ZIP archive, or a local server path. " +
-    "Returns the site ID and public URL. Supported file types: html, css, js, images, fonts, etc.",
+    "Deploy a static frontend website and return a public URL. Use this when the user asks to publish, deploy, preview, host, share, or expose HTML/CSS/JS files. " +
+    "Provide exactly one source: files, zip_base64, or source_path. For generated pages, prefer files with an index.html entry. " +
+    "After success, show the returned url field directly to the user. Do not invent or rewrite the URL.",
   inputSchema: deploySiteInputSchema,
   annotations: {
-    title: "Deploy Site",
+    title: "Deploy Static Website",
     readOnlyHint: false,
     destructiveHint: false,
     idempotentHint: false,
@@ -126,6 +127,8 @@ export function createDeploySiteHandler(db: SiteDb, storage: SiteStorage, config
                 url,
                 files_count: filesCount,
                 expires_at: expiresAt ?? "never",
+                usage_hint: "Deployment succeeded. Present the url field to the user as the public access link.",
+                next_action: "Tell the user the site is deployed and include the url. Use update_site to change files or TTL later.",
               },
               null,
               2

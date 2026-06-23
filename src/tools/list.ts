@@ -8,19 +8,19 @@ export const listSitesInputSchema = {
   keyword: z
     .string()
     .optional()
-    .describe("Optional keyword to filter sites by name or ID (case-insensitive)."),
+    .describe("Optional keyword to filter sites by site_id or name, case-insensitive. Use this when the user references a known site name or partial ID."),
 };
 
 // ---- Tool metadata ----
 
 export const listSitesToolConfig = {
-  title: "List Sites",
+  title: "List Deployed Websites",
   description:
-    "List all deployed static sites. Returns site ID, name, URL, file count, and timestamps. " +
-    "Optionally filter by keyword.",
+    "List deployed static websites and their public URLs, IDs, file counts, creation/update times, and expiration times. " +
+    "Use this to verify deployments, find a site_id before update/delete, or show the user currently hosted pages.",
   inputSchema: listSitesInputSchema,
   annotations: {
-    title: "List Sites",
+    title: "List Deployed Websites",
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: true,
@@ -57,6 +57,7 @@ export function createListSitesHandler(db: SiteDb) {
                 updated_at: s.updatedAt,
                 expires_at: s.expiresAt ?? "never",
               })),
+              usage_hint: "Use site_id for update_site or delete_site. Present url values directly when the user asks for access links.",
             },
             null,
             2

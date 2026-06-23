@@ -7,41 +7,41 @@ import { type ServerConfig, resolveExpiresAt } from "../config.js";
 // ---- Input schema ----
 
 export const updateSiteInputSchema = {
-  site_id: z.string().describe("The unique site ID to update."),
+  site_id: z.string().describe("The site_id returned by deploy_site or list_sites. Required to identify which deployed site to update."),
   files: z
     .array(
       z.object({
-        path: z.string().describe('Relative file path, e.g. "index.html"'),
-        content: z.string().describe("Base64-encoded file content"),
+        path: z.string().describe('Relative file path inside the existing site, e.g. "index.html" or "assets/app.js". Do not use absolute paths or ../ segments.'),
+        content: z.string().describe("Base64-encoded replacement or new file bytes."),
       })
     )
     .optional()
-    .describe("Upload individual files. Mutually exclusive with zip_base64."),
+    .describe("Upload replacement or additional individual files. Mutually exclusive with zip_base64. Omit when only changing ttl."),
   zip_base64: z
     .string()
     .optional()
-    .describe("Entire site as a base64-encoded ZIP. Replaces all existing files. Mutually exclusive with files."),
+    .describe("Base64-encoded ZIP archive used to update the site. Mutually exclusive with files. Use clean=true when the ZIP should replace the whole site."),
   clean: z
     .boolean()
     .optional()
     .default(false)
-    .describe("When true, remove all existing files before writing new ones. Default false."),
+    .describe("When true, remove all existing files before writing the provided files or ZIP. Use carefully for full replacement. Default false."),
   ttl: z
     .union([z.number(), z.string()])
     .optional()
-    .describe("Update/extend survival time (TTL) for the site, e.g. 3600 (seconds), '30m', '12h', '7d', or 'never' to remove expiration."),
+    .describe("Optional new survival time from now. Examples: 3600, '30m', '12h', '7d', or 'never' to remove expiration. You may call update_site with only site_id and ttl to extend or shorten a site lifetime."),
 };
 
 // ---- Tool metadata ----
 
 export const updateSiteToolConfig = {
-  title: "Update Site",
+  title: "Update Deployed Website",
   description:
-    "Update an existing deployed site. You can replace or add files via base64 list or ZIP. " +
-    "Set clean=true to wipe existing files first.",
+    "Update an existing deployed static website. Use this to replace files, add files, upload a ZIP, fully clean and redeploy, or change the site's TTL. " +
+    "To only extend, shorten, or remove expiration, provide site_id and ttl without files. After success, show the returned url and expires_at to the user.",
   inputSchema: updateSiteInputSchema,
   annotations: {
-    title: "Update Site",
+    title: "Update Deployed Website",
     readOnlyHint: false,
     destructiveHint: false,
     idempotentHint: false,
@@ -115,6 +115,8 @@ export function createUpdateSiteHandler(db: SiteDb, storage: SiteStorage, config
                 files_written: filesWritten,
                 total_files: totalFiles,
                 expires_at: shouldUpdateTtl ? expiresAt ?? "never" : record.expiresAt ?? "never",
+                usage_hint: "Update succeeded. Present the url field to the user if they need to access the site.",
+                next_action: "Tell the user what changed and include expires_at when TTL was requested.",
               },
               null,
               2

@@ -18,6 +18,8 @@ export function createMcpServer(config: ServerConfig, db: SiteDb, storage: SiteS
     {
       name: "mcp-html-nginx",
       version: "1.0.0",
+      description:
+        "Deploy static frontend websites and return public URLs. Use this MCP when the user asks to publish, preview, host, deploy, share, or temporarily expose HTML/CSS/JS frontend files. Always show the returned url to the user after a successful deployment.",
     },
     {
       capabilities: {

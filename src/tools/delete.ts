@@ -6,18 +6,18 @@ import type { SiteStorage } from "../storage.js";
 // ---- Input schema ----
 
 export const deleteSiteInputSchema = {
-  site_id: z.string().describe("The unique site ID to delete (e.g. 'a3xK9m')."),
+  site_id: z.string().describe("The site_id returned by deploy_site or list_sites. Required to delete the deployed website and its stored files."),
 };
 
 // ---- Tool metadata ----
 
 export const deleteSiteToolConfig = {
-  title: "Delete Site",
+  title: "Delete Deployed Website",
   description:
-    "Delete a deployed site by its ID. Removes all files from disk and the metadata record. This action is irreversible.",
+    "Delete a deployed static website by site_id. Removes its files from disk and deletes metadata. Use only when the user clearly asks to remove, delete, or clean up a deployed site. This action is irreversible.",
   inputSchema: deleteSiteInputSchema,
   annotations: {
-    title: "Delete Site",
+    title: "Delete Deployed Website",
     readOnlyHint: false,
     destructiveHint: true,
     idempotentHint: true,
@@ -45,11 +45,12 @@ export function createDeleteSiteHandler(db: SiteDb, storage: SiteStorage) {
         {
           type: "text",
           text: JSON.stringify(
-            {
-              status: "deleted",
-              site_id: args.site_id,
-              name: record.name,
-            },
+              {
+                status: "deleted",
+                site_id: args.site_id,
+                name: record.name,
+                usage_hint: "Deletion succeeded. Tell the user the site URL is no longer available.",
+              },
             null,
             2
           ),
