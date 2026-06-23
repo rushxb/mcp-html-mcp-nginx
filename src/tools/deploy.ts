@@ -40,8 +40,8 @@ export const deploySiteInputSchema = {
 export const deploySiteToolConfig = {
   title: "Deploy Static Website",
   description:
-    "Deploy a static frontend website and return a public URL. Use this when the user asks to publish, deploy, preview, host, share, or expose HTML/CSS/JS files. " +
-    "Provide exactly one source: files, zip_base64, or source_path. For generated pages, prefer files with an index.html entry. " +
+    "Deploy a static frontend website and return a public URL from MCP arguments. Prefer get_upload_instructions plus the HTTP upload API when the user wants to upload real local files or folders. " +
+    "Use this tool mainly for small LLM-generated pages, already-base64 file payloads, ZIP payloads, or server-side source_path deployments. Provide exactly one source: files, zip_base64, or source_path. " +
     "After success, show the returned url field directly to the user. Do not invent or rewrite the URL.",
   inputSchema: deploySiteInputSchema,
   annotations: {

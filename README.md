@@ -152,6 +152,30 @@ server {
         proxy_buffering off;
     }
 
+    # SSE 传输会回调 /messages，必须代理到 MCP 服务
+    location /messages {
+        proxy_pass http://127.0.0.1:3091/messages;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+    }
+
+    # 真实文件上传入口，支持 multipart/form-data 多文件/文件夹上传
+    location /upload/ {
+        proxy_pass http://127.0.0.1:3091/upload/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_request_buffering off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
     # 所有部署网页共用这个前缀
     location /sites/ {
         alias /var/www/mcp-sites/;
@@ -174,10 +198,15 @@ sudo nginx -t && sudo systemctl reload nginx
 * Streamable HTTP: `https://yourdomain.com/mcp/mcp`
 * SSE: `https://yourdomain.com/mcp/sse?apiKey=your_super_secret_key`
 
-如果不通过 Nginx 代理 MCP，只开放 `3000` 端口，则连接地址是：
+上传接口地址：
 
-* Streamable HTTP: `http://<服务器IP>:3000/mcp`
-* SSE: `http://<服务器IP>:3000/sse?apiKey=your_super_secret_key`
+* 文件上传: `https://yourdomain.com/upload/files`
+
+如果不通过 Nginx 代理 MCP，只开放 `3091` 端口，则连接地址是：
+
+* Streamable HTTP: `http://<服务器IP>:3091/mcp`
+* SSE: `http://<服务器IP>:3091/sse?apiKey=your_super_secret_key`
+* 文件上传: `http://<服务器IP>:3091/upload/files`
 
 ### 方案二：Node.js + PM2 部署（备选）
 
@@ -239,7 +268,7 @@ pm2 startup
 3. 在弹出的对话框中进行配置：
    - **Name**: `mcp-html-nginx`
    - **Type**: `SSE`
-   - **URL**: `http://<您的服务器IP>:3000/sse?apiKey=your_super_secret_key` (请替换为您的实际 IP 和密钥)
+   - **URL**: `https://yourdomain.com/mcp/sse?apiKey=your_super_secret_key` (请替换为您的实际域名和密钥)
 4. 点击 **Save**。如果连接成功，Cursor 面板中会显示绿色的连接状态，并列出可用的工具列表。
 
 > 如果 MCP 客户端支持自定义请求头，生产环境建议使用 `Authorization: Bearer your_super_secret_key` 或 `x-api-key: your_super_secret_key`，避免密钥出现在 URL、代理日志或浏览器历史中。SSE 初始化认证成功后，服务端会按 session 放行后续 `/messages` 请求，不会再把密钥写回 SSE endpoint 事件。
@@ -254,7 +283,7 @@ pm2 startup
      "mcpServers": {
        "mcp-html-nginx": {
          "sse": {
-           "url": "http://<您的服务器IP>:3000/sse?apiKey=your_super_secret_key"
+          "url": "https://yourdomain.com/mcp/sse?apiKey=your_super_secret_key"
          }
        }
      }
@@ -263,14 +292,37 @@ pm2 startup
 3. 重启 Claude Desktop。
 
 ### 3. LLM 交互与实战
-当客户端连接上此 MCP 服务后，您的 AI 助手便拥有了自动部署网页的能力。您只需在对话框中像平常一样和 AI 交流，例如：
+当客户端连接上此 MCP 服务后，您的 AI 助手便拥有部署网页、查询站点、更新 TTL、删除站点的能力。
 
-- **用户**: *"帮我写一个倒计时网页，然后把它部署到我的服务器上。"*
+对于真实前端文件或文件夹，推荐走 HTTP 文件上传接口，不要让 AI 把大量 HTML/JS/CSS 内容塞进 MCP 参数。
+
+```bash
+curl -X POST 'https://yourdomain.com/upload/files' \
+  -H 'Authorization: Bearer your_super_secret_key' \
+  -F 'name=my-site' \
+  -F 'ttl=72h' \
+  -F 'paths=index.html' -F 'file=@./index.html;filename=index.html' \
+  -F 'paths=assets/app.js' -F 'file=@./assets/app.js;filename=app.js'
+```
+
+上传成功后返回：
+
+```json
+{
+  "status": "deployed",
+  "site_id": "abc12345",
+  "url": "https://yourdomain.com/sites/abc12345/",
+  "expires_at": "2026-06-26T10:24:33.035Z"
+}
+```
+
+LLM 交互示例：
+
+- **用户**: *"我有一个前端文件夹要部署，告诉我怎么上传。"*
 - **AI (自动分析)**: 
-  1. 生成 HTML/CSS/JS 代码。
-  2. 将网页文件编码为 Base64。
-  3. 自动调用 `deploy_site` 工具，将文件上传至服务器。
-  4. 最终返回访问地址给您，例如：`https://yourdomain.com/sites/XoGd51_w/`。
+  1. 调用 `get_upload_instructions` 获取上传入口和字段说明。
+  2. 指导用户或客户端把真实文件以 `multipart/form-data` 上传到 `/upload/files`。
+  3. 上传成功后展示返回的 `url`。
   
 - **用户**: *"把这个网站的存活时间缩短到 30 分钟，并更新一下标题。"*
 - **AI (自动分析)**:
@@ -281,8 +333,17 @@ pm2 startup
 
 ## MCP 工具接口详细说明
 
-### 1. `deploy_site` (部署静态站点)
-部署静态网页。接受三种部署源模式之一（互斥，三选一）：
+### 1. `get_upload_instructions` (获取真实文件上传说明)
+返回 `/upload/files` 上传接口说明。适合用户已有本地文件、文件夹、构建产物时使用。
+
+上传接口支持：
+* 多个 `file` 文件字段。
+* 可选多个 `paths` 字段，用于指定文件在站点中的相对路径。
+* 可选 `name` 字段，指定站点名称。
+* 可选 `ttl` 字段，指定存活时间。
+
+### 2. `deploy_site` (通过 MCP 参数部署静态站点)
+通过 MCP 工具参数部署静态网页。适合小型 LLM 生成页面、服务端已有路径或程序化 base64 场景。真实文件/文件夹上传优先使用 `get_upload_instructions` + `/upload/files`。接受三种部署源模式之一（互斥，三选一）：
 *   `files`: 文件对象数组，每个对象包含 `path`（相对路径）和 `content`（Base64 编码的文本或二进制内容），适合单页应用或少量文件。
 *   `zip_base64`: 整个站点的 Base64 编码 ZIP 压缩包，适合复杂的完整网站及带有多媒体资源的站点。
 *   `source_path`: 服务器本地已存在的静态文件夹绝对路径。
@@ -294,7 +355,7 @@ pm2 startup
 *   `source_path` (string, 可选): 服务器本地的绝对路径。
 *   `ttl` (number | string, 可选): 网站的存活时间（生命周期）。例如：`3600`（代表3600秒）、`"30m"`（30分钟）、`"12h"`（12小时）、`"7d"`（7天）、`"never"`（永久）。若不填，则遵循默认存活时间（若未配置默认值，则永久存活）。若服务端配置了 `MCP_MAX_TTL`，则不能超过该上限。
 
-### 2. `update_site` (更新静态站点)
+### 3. `update_site` (更新静态站点)
 更新一个已经存在的站点，支持增量更新或清空覆盖。
 
 **输入参数：**
@@ -304,7 +365,7 @@ pm2 startup
 *   `clean` (boolean, 可选, 默认 false): 设置为 `true` 时，会在写入新文件前清空该站点的旧目录。
 *   `ttl` (number | string, 可选): 更新或延长网站的存活时间。可以只传 `site_id` 和 `ttl` 来续期，也可以传 `"never"` 取消过期时间。若服务端配置了 `MCP_MAX_TTL`，则不能超过该上限。
 
-### 3. `list_sites` (列出静态站点)
+### 4. `list_sites` (列出静态站点)
 列出当前所有已部署的静态网站信息（包括 ID、名称、URL、文件数量等）。
 
 **输入参数：**

@@ -11,6 +11,14 @@ export interface FileEntry {
   content: string;
 }
 
+/** A single file to be written, with raw bytes. */
+export interface BufferFileEntry {
+  /** Relative path inside the site, e.g. "index.html" or "css/style.css". */
+  path: string;
+  /** Raw file bytes. */
+  content: Buffer;
+}
+
 // ---- Helpers ----
 
 /** Recursively count files in a directory. */
@@ -75,6 +83,17 @@ export class SiteStorage {
    * Returns the number of files written.
    */
   writeFiles(siteId: string, files: FileEntry[]): number {
+    return this.writeFileBuffers(
+      siteId,
+      files.map((f) => ({ path: f.path, content: Buffer.from(f.content, "base64") }))
+    );
+  }
+
+  /**
+   * Write raw files into a site directory.
+   * Returns the number of files written.
+   */
+  writeFileBuffers(siteId: string, files: BufferFileEntry[]): number {
     const base = this.siteDir(siteId);
     mkdirSync(base, { recursive: true });
 
@@ -82,7 +101,7 @@ export class SiteStorage {
     for (const f of files) {
       const dest = safePath(base, f.path);
       assertAllowedExt(dest, this.allowedExtensions);
-      const buf = Buffer.from(f.content, "base64");
+      const buf = f.content;
       totalBytes += buf.length;
       if (totalBytes > this.maxUploadBytes) {
         throw new Error(`Total upload size exceeds limit of ${this.maxUploadBytes} bytes`);
@@ -99,10 +118,18 @@ export class SiteStorage {
    * Returns the number of extracted files.
    */
   extractZip(siteId: string, zipBase64: string): number {
+    const zipBuf = Buffer.from(zipBase64, "base64");
+    return this.extractZipBuffer(siteId, zipBuf);
+  }
+
+  /**
+   * Extract a ZIP buffer into a site directory.
+   * Returns the number of extracted files.
+   */
+  extractZipBuffer(siteId: string, zipBuf: Buffer): number {
     const base = this.siteDir(siteId);
     mkdirSync(base, { recursive: true });
 
-    const zipBuf = Buffer.from(zipBase64, "base64");
     if (zipBuf.length > this.maxUploadBytes) {
       throw new Error(`ZIP size exceeds limit of ${this.maxUploadBytes} bytes`);
     }

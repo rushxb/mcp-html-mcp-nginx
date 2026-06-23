@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import express, { type Request, type Response } from "express";
+import { nanoid } from "nanoid";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
@@ -7,6 +8,8 @@ import { loadConfig } from "./config.js";
 import { SiteDb } from "./db.js";
 import { SiteStorage } from "./storage.js";
 import { createMcpServer } from "./server.js";
+import { resolveExpiresAt } from "./config.js";
+import { parseMultipartUpload } from "./upload.js";
 
 // ---- Bootstrap ----
 
@@ -168,6 +171,58 @@ app.post("/messages", async (req: Request, res: Response) => {
 });
 
 // ===========================================================================
+// HTTP file upload deployment API
+// ===========================================================================
+
+app.post("/upload/files", async (req: Request, res: Response) => {
+  if (!validateRequestApiKey(req, res)) return;
+
+  try {
+    const form = await parseMultipartUpload(req, config.maxUploadBytes);
+    if (form.files.length === 0) {
+      res.status(400).json({ error: "No files uploaded. Send multipart/form-data with one or more file parts." });
+      return;
+    }
+
+    const siteId = nanoid(8);
+    const siteName = form.fields.name || `site-${siteId}`;
+    const expiresAt = resolveExpiresAt(form.fields.ttl, config);
+
+    try {
+      const filesCount = storage.writeFileBuffers(siteId, form.files);
+      const url = `${config.baseUrl.replace(/\/+$/, "")}/${siteId}/`;
+      const now = new Date().toISOString();
+
+      db.add({
+        siteId,
+        name: siteName,
+        dir: storage.siteDir(siteId),
+        url,
+        filesCount,
+        createdAt: now,
+        updatedAt: now,
+        expiresAt,
+      });
+
+      res.json({
+        status: "deployed",
+        site_id: siteId,
+        name: siteName,
+        url,
+        files_count: filesCount,
+        expires_at: expiresAt ?? "never",
+        usage_hint: "Upload deployment succeeded. Open the url field in a browser.",
+      });
+    } catch (err) {
+      storage.removeSite(siteId);
+      throw err;
+    }
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
+  }
+});
+
+// ===========================================================================
 // Health check
 // ===========================================================================
 
@@ -217,6 +272,9 @@ app.listen(PORT, HOST, () => {
   Transports:
     Streamable HTTP : POST/GET/DELETE /mcp
     SSE (legacy)    : GET /sse  +  POST /messages
+
+  Upload API:
+    POST /upload/files  multipart/form-data
 
   Health check:     GET /health
 

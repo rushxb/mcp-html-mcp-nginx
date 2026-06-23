@@ -6,6 +6,7 @@ import { deploySiteToolConfig, createDeploySiteHandler } from "./tools/deploy.js
 import { listSitesToolConfig, createListSitesHandler } from "./tools/list.js";
 import { deleteSiteToolConfig, createDeleteSiteHandler } from "./tools/delete.js";
 import { updateSiteToolConfig, createUpdateSiteHandler } from "./tools/update.js";
+import { uploadInstructionsToolConfig, createUploadInstructionsHandler } from "./tools/uploadInstructions.js";
 
 /**
  * Create a fully-configured MCP server instance.
@@ -34,6 +35,7 @@ export function createMcpServer(config: ServerConfig, db: SiteDb, storage: SiteS
   server.registerTool("list_sites", listSitesToolConfig, createListSitesHandler(db));
   server.registerTool("delete_site", deleteSiteToolConfig, createDeleteSiteHandler(db, storage));
   server.registerTool("update_site", updateSiteToolConfig, createUpdateSiteHandler(db, storage, config));
+  server.registerTool("get_upload_instructions", uploadInstructionsToolConfig, createUploadInstructionsHandler(config));
 
   return server;
 }
