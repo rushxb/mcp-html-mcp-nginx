@@ -176,16 +176,26 @@ server {
         proxy_send_timeout 3600s;
     }
 
-    # 所有部署网页共用这个前缀
+    # 所有部署网页共用这个前缀。
+    # HTML 入口必须禁用强缓存，避免浏览器保留旧 index.html 后继续请求已删除的旧 assets。
     location /sites/ {
         alias /var/www/mcp-sites/;
         index index.html;
         try_files $uri $uri/ =404;
-        expires 1h;
-        add_header Cache-Control "public, no-transform";
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    }
+
+    # 带内容哈希的前端构建产物可以长期缓存。
+    # Vite / Vue / React 等构建产物通常位于 /assets/ 下，文件名变化即可触发缓存更新。
+    location ~ ^/sites/(.+\.(?:js|css|png|jpg|jpeg|gif|svg|ico|webp|woff2?|ttf|eot|map))$ {
+        alias /var/www/mcp-sites/$1;
+        expires 1y;
+        add_header Cache-Control "public, immutable, no-transform" always;
     }
 }
 ```
+
+> 如果部署的是 Vue Router / React Router 这类 history 模式 SPA，深链接刷新可能需要额外的 `index.html` fallback；否则 `/sites/<siteId>/admin/users` 这类地址会被 Nginx 当成真实文件路径而返回 404。共享 `/sites/` 前缀下最稳妥的方案是前端使用正确的 base 路径或 hash history；MCP 工具返回的 `validation.spa_hint` 会提示这类风险。
 
 重新加载 Nginx：
 
@@ -201,12 +211,14 @@ sudo nginx -t && sudo systemctl reload nginx
 上传接口地址：
 
 * 文件上传: `https://yourdomain.com/upload/files`
+* ZIP 上传: `https://yourdomain.com/upload/zip`
 
 如果不通过 Nginx 代理 MCP，只开放 `3091` 端口，则连接地址是：
 
 * Streamable HTTP: `http://<服务器IP>:3091/mcp`
 * SSE: `http://<服务器IP>:3091/sse?apiKey=your_super_secret_key`
 * 文件上传: `http://<服务器IP>:3091/upload/files`
+* ZIP 上传: `http://<服务器IP>:3091/upload/zip`
 
 ### 方案二：Node.js + PM2 部署（备选）
 
@@ -305,6 +317,17 @@ curl -X POST 'https://yourdomain.com/upload/files' \
   -F 'paths=assets/app.js' -F 'file=@./assets/app.js;filename=app.js'
 ```
 
+对于 Vite / Vue / React 等完整构建产物，推荐先压缩 `dist` 目录内容，再直接上传 ZIP，避免 MCP JSON 参数中传输大体积 base64：
+
+```bash
+cd dist
+zip -r ../dist.zip .
+curl -X POST 'https://yourdomain.com/upload/zip?name=my-site&ttl=72h&spa=true' \
+  -H 'Authorization: Bearer your_super_secret_key' \
+  -H 'Content-Type: application/zip' \
+  --data-binary '@../dist.zip'
+```
+
 上传成功后返回：
 
 ```json
@@ -312,7 +335,15 @@ curl -X POST 'https://yourdomain.com/upload/files' \
   "status": "deployed",
   "site_id": "abc12345",
   "url": "https://yourdomain.com/sites/abc12345/",
-  "expires_at": "2026-06-26T10:24:33.035Z"
+  "entry_url": "https://yourdomain.com/sites/abc12345/index.html",
+  "expires_at": "2026-06-26T10:24:33.035Z",
+  "validation": {
+    "entry_file": "index.html",
+    "asset_count": 2,
+    "missing_assets": [],
+    "warnings": [],
+    "cache_hint": "Use no-cache for index.html and long immutable caching for hashed assets."
+  }
 }
 ```
 

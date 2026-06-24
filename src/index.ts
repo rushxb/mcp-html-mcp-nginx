@@ -10,6 +10,7 @@ import { SiteStorage } from "./storage.js";
 import { createMcpServer } from "./server.js";
 import { resolveExpiresAt } from "./config.js";
 import { parseMultipartUpload } from "./upload.js";
+import { validateDeployment } from "./validation.js";
 
 // ---- Bootstrap ----
 
@@ -79,6 +80,26 @@ function validateRequestApiKey(req: Request, res: Response): boolean {
     id: null,
   });
   return false;
+}
+
+function parseBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return false;
+  return ["1", "true", "yes", "y", "on"].includes(value.trim().toLowerCase());
+}
+
+async function readRawRequestBody(req: Request, maxBytes: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of req) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buf.length;
+    if (total > maxBytes) {
+      throw new Error(`Upload body exceeds limit of ${maxBytes} bytes`);
+    }
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks);
 }
 
 // ===========================================================================
@@ -187,11 +208,13 @@ app.post("/upload/files", async (req: Request, res: Response) => {
     const siteId = nanoid(8);
     const siteName = form.fields.name || `site-${siteId}`;
     const expiresAt = resolveExpiresAt(form.fields.ttl, config);
+    const spa = parseBoolean(form.fields.spa);
 
     try {
       const filesCount = storage.writeFileBuffers(siteId, form.files);
       const url = `${config.baseUrl.replace(/\/+$/, "")}/${siteId}/`;
       const now = new Date().toISOString();
+      const validation = validateDeployment(storage.siteDir(siteId));
 
       db.add({
         siteId,
@@ -202,6 +225,7 @@ app.post("/upload/files", async (req: Request, res: Response) => {
         createdAt: now,
         updatedAt: now,
         expiresAt,
+        spa,
       });
 
       res.json({
@@ -209,9 +233,67 @@ app.post("/upload/files", async (req: Request, res: Response) => {
         site_id: siteId,
         name: siteName,
         url,
+        entry_url: validation.entry_file ? `${url}${validation.entry_file}` : url,
         files_count: filesCount,
         expires_at: expiresAt ?? "never",
+        spa,
+        validation,
         usage_hint: "Upload deployment succeeded. Open the url field in a browser.",
+      });
+    } catch (err) {
+      storage.removeSite(siteId);
+      throw err;
+    }
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
+  }
+});
+
+app.post("/upload/zip", async (req: Request, res: Response) => {
+  if (!validateRequestApiKey(req, res)) return;
+
+  try {
+    const zipBuffer = await readRawRequestBody(req, config.maxUploadBytes);
+    if (zipBuffer.length === 0) {
+      res.status(400).json({ error: "No ZIP bytes received. Send application/zip request body." });
+      return;
+    }
+
+    const siteId = nanoid(8);
+    const siteName = typeof req.query.name === "string" && req.query.name.trim() ? req.query.name.trim() : `site-${siteId}`;
+    const ttl = typeof req.query.ttl === "string" ? req.query.ttl : undefined;
+    const spa = parseBoolean(req.query.spa);
+    const expiresAt = resolveExpiresAt(ttl, config);
+
+    try {
+      const filesCount = storage.extractZipBuffer(siteId, zipBuffer);
+      const url = `${config.baseUrl.replace(/\/+$/, "")}/${siteId}/`;
+      const now = new Date().toISOString();
+      const validation = validateDeployment(storage.siteDir(siteId));
+
+      db.add({
+        siteId,
+        name: siteName,
+        dir: storage.siteDir(siteId),
+        url,
+        filesCount,
+        createdAt: now,
+        updatedAt: now,
+        expiresAt,
+        spa,
+      });
+
+      res.json({
+        status: "deployed",
+        site_id: siteId,
+        name: siteName,
+        url,
+        entry_url: validation.entry_file ? `${url}${validation.entry_file}` : url,
+        files_count: filesCount,
+        expires_at: expiresAt ?? "never",
+        spa,
+        validation,
+        usage_hint: "ZIP upload deployment succeeded. Open the url field in a browser.",
       });
     } catch (err) {
       storage.removeSite(siteId);

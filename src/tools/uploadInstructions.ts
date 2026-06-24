@@ -28,6 +28,7 @@ export function createUploadInstructionsHandler(config: ServerConfig) {
   return async (args: { public_base_url?: string }): Promise<CallToolResult> => {
     const base = args.public_base_url?.replace(/\/+$/, "") || "<same-origin-as-this-MCP-server>";
     const uploadUrl = `${base}/upload/files`;
+    const zipUploadUrl = `${base}/upload/zip`;
 
     return {
       content: [
@@ -36,8 +37,12 @@ export function createUploadInstructionsHandler(config: ServerConfig) {
           text: JSON.stringify(
             {
               upload_url: uploadUrl,
+              zip_upload_url: zipUploadUrl,
               method: "POST",
-              content_type: "multipart/form-data",
+              content_type: {
+                upload_url: "multipart/form-data",
+                zip_upload_url: "application/zip",
+              },
               auth: config.apiKey
                 ? "Provide Authorization: Bearer <api_key>, x-api-key: <api_key>, or apiKey query parameter."
                 : "No API key is configured.",
@@ -46,22 +51,31 @@ export function createUploadInstructionsHandler(config: ServerConfig) {
                 paths: "Optional repeated text field. Provide relative paths such as index.html or assets/app.js for uploaded files, useful for folder uploads.",
                 name: "Optional human-readable site name.",
                 ttl: "Optional survival time, e.g. 30m, 12h, 7d, or never.",
+                spa: "Optional boolean. Use true for single-page apps that need index.html fallback guidance.",
               },
-              curl_example:
+              curl_files_example:
                 `curl -X POST '${uploadUrl}' ` +
                 `-H 'Authorization: Bearer <api_key>' ` +
                 `-F 'name=my-site' ` +
                 `-F 'ttl=72h' ` +
                 `-F 'paths=index.html' -F 'file=@./index.html;filename=index.html' ` +
                 `-F 'paths=assets/app.js' -F 'file=@./assets/app.js;filename=app.js'`,
+              curl_zip_example:
+                `curl -X POST '${zipUploadUrl}?name=my-site&ttl=72h&spa=true' ` +
+                `-H 'Authorization: Bearer <api_key>' ` +
+                `-H 'Content-Type: application/zip' ` +
+                `--data-binary '@./dist.zip'`,
               response: {
                 status: "deployed",
                 site_id: "string",
                 url: "public website URL to show the user",
+                entry_url: "entry HTML URL when detected",
                 expires_at: "ISO timestamp or never",
+                validation: "entry file, referenced asset checks, cache hints, SPA warnings, and missing asset details",
               },
+              cache_hint: "Serve index.html with no-cache/no-store, and serve hashed assets with long immutable caching to avoid stale entry HTML pointing to deleted asset names.",
               usage_hint:
-                "Do not paste large HTML or asset contents into MCP arguments. Ask the user or client to upload real files to upload_url, then show the returned url.",
+                "Do not paste large frontend builds into MCP arguments. For Vite/React/Vue dist folders, ZIP the dist directory and upload it to zip_upload_url, then show the returned url and any validation warnings.",
             },
             null,
             2

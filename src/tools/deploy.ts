@@ -4,6 +4,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { SiteDb } from "../db.js";
 import type { SiteStorage, FileEntry } from "../storage.js";
 import { type ServerConfig, resolveExpiresAt } from "../config.js";
+import { validateDeployment } from "../validation.js";
 
 // ---- Input schema ----
 
@@ -33,6 +34,11 @@ export const deploySiteInputSchema = {
     .union([z.number(), z.string()])
     .optional()
     .describe("Optional survival time for the deployed site. Examples: 3600 for seconds, '30m', '12h', '7d', or 'never'. If omitted, the server default TTL is used. If a maximum TTL is configured, values above it are rejected."),
+  spa: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("Set true for single-page applications using client-side routing. The response will include SPA routing guidance for /sites/{siteId}/ deep links."),
 };
 
 // ---- Tool metadata (enterprise MCP best practices) ----
@@ -62,8 +68,9 @@ export function createDeploySiteHandler(db: SiteDb, storage: SiteStorage, config
     zip_base64?: string;
     source_path?: string;
     ttl?: number | string;
+    spa?: boolean;
   }): Promise<CallToolResult> => {
-    const { name, files, zip_base64, source_path, ttl } = args;
+    const { name, files, zip_base64, source_path, ttl, spa } = args;
 
     // Validate: exactly one source must be provided
     const sources = [files, zip_base64, source_path].filter(Boolean);
@@ -101,6 +108,7 @@ export function createDeploySiteHandler(db: SiteDb, storage: SiteStorage, config
 
       const url = `${config.baseUrl.replace(/\/+$/, "")}/${siteId}/`;
       const now = new Date().toISOString();
+      const validation = validateDeployment(storage.siteDir(siteId));
 
       const expiresAt = resolveExpiresAt(ttl, config);
 
@@ -113,6 +121,7 @@ export function createDeploySiteHandler(db: SiteDb, storage: SiteStorage, config
         createdAt: now,
         updatedAt: now,
         expiresAt,
+        spa: Boolean(spa),
       });
 
       return {
@@ -125,10 +134,16 @@ export function createDeploySiteHandler(db: SiteDb, storage: SiteStorage, config
                 site_id: siteId,
                 name: siteName,
                 url,
+                entry_url: validation.entry_file ? `${url}${validation.entry_file}` : url,
                 files_count: filesCount,
                 expires_at: expiresAt ?? "never",
+                spa: Boolean(spa),
+                validation,
                 usage_hint: "Deployment succeeded. Present the url field to the user as the public access link.",
-                next_action: "Tell the user the site is deployed and include the url. Use update_site to change files or TTL later.",
+                next_action:
+                  validation.warnings.length > 0
+                    ? "Tell the user the site is deployed, include the url, and mention validation warnings that may affect browser access."
+                    : "Tell the user the site is deployed and include the url. Use update_site to change files or TTL later.",
               },
               null,
               2

@@ -56,6 +56,7 @@ export function createListSitesHandler(db: SiteDb) {
                 created_at: s.createdAt,
                 updated_at: s.updatedAt,
                 expires_at: s.expiresAt ?? "never",
+                spa: s.spa ?? false,
               })),
               usage_hint: "Use site_id for update_site or delete_site. Present url values directly when the user asks for access links.",
             },

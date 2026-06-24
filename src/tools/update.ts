@@ -3,6 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { SiteDb } from "../db.js";
 import type { SiteStorage, FileEntry } from "../storage.js";
 import { type ServerConfig, resolveExpiresAt } from "../config.js";
+import { validateDeployment } from "../validation.js";
 
 // ---- Input schema ----
 
@@ -30,6 +31,10 @@ export const updateSiteInputSchema = {
     .union([z.number(), z.string()])
     .optional()
     .describe("Optional new survival time from now. Examples: 3600, '30m', '12h', '7d', or 'never' to remove expiration. You may call update_site with only site_id and ttl to extend or shorten a site lifetime."),
+  spa: z
+    .boolean()
+    .optional()
+    .describe("Optional SPA flag update. Set true for client-side routed apps that need index.html fallback guidance."),
 };
 
 // ---- Tool metadata ----
@@ -58,6 +63,7 @@ export function createUpdateSiteHandler(db: SiteDb, storage: SiteStorage, config
     zip_base64?: string;
     clean?: boolean;
     ttl?: number | string;
+    spa?: boolean;
   }): Promise<CallToolResult> => {
     const record = db.findById(args.site_id);
     if (!record) {
@@ -68,9 +74,9 @@ export function createUpdateSiteHandler(db: SiteDb, storage: SiteStorage, config
     }
 
     const sources = [args.files, args.zip_base64].filter(Boolean);
-    if (sources.length === 0 && args.ttl === undefined) {
+    if (sources.length === 0 && args.ttl === undefined && args.spa === undefined) {
       return {
-        content: [{ type: "text", text: "Error: You must provide files, zip_base64, or ttl." }],
+        content: [{ type: "text", text: "Error: You must provide files, zip_base64, ttl, or spa." }],
         isError: true,
       };
     }
@@ -84,23 +90,23 @@ export function createUpdateSiteHandler(db: SiteDb, storage: SiteStorage, config
     try {
       const shouldUpdateTtl = args.ttl !== undefined;
       const expiresAt = shouldUpdateTtl ? resolveExpiresAt(args.ttl, { defaultTtl: undefined, maxTtl: config.maxTtl }) : undefined;
-
-      if (args.clean) {
-        storage.removeSite(args.site_id);
-      }
+      const oldTotalFiles = record.filesCount;
 
       let filesWritten = 0;
       if (args.files && args.files.length > 0) {
-        filesWritten = storage.writeFiles(args.site_id, args.files);
+        filesWritten = args.clean ? storage.replaceWithFileBuffers(args.site_id, args.files.map((f) => ({ path: f.path, content: Buffer.from(f.content, "base64") }))) : storage.writeFiles(args.site_id, args.files);
       } else if (args.zip_base64) {
-        filesWritten = storage.extractZip(args.site_id, args.zip_base64);
+        const zipBuffer = Buffer.from(args.zip_base64, "base64");
+        filesWritten = args.clean ? storage.replaceWithZipBuffer(args.site_id, zipBuffer) : storage.extractZipBuffer(args.site_id, zipBuffer);
       }
 
       const totalFiles = storage.countFiles(args.site_id);
-      db.update(args.site_id, {
+      const updatedRecord = db.update(args.site_id, {
         filesCount: totalFiles,
         ...(shouldUpdateTtl ? { expiresAt } : {}),
+        ...(args.spa !== undefined ? { spa: args.spa } : {}),
       });
+      const validation = validateDeployment(storage.siteDir(args.site_id));
 
       return {
         content: [
@@ -112,11 +118,19 @@ export function createUpdateSiteHandler(db: SiteDb, storage: SiteStorage, config
                 site_id: args.site_id,
                 name: record.name,
                 url: record.url,
+                entry_url: validation.entry_file ? `${record.url}${validation.entry_file}` : record.url,
                 files_written: filesWritten,
+                old_total_files: oldTotalFiles,
                 total_files: totalFiles,
-                expires_at: shouldUpdateTtl ? expiresAt ?? "never" : record.expiresAt ?? "never",
+                clean_applied: Boolean(args.clean && sources.length > 0),
+                expires_at: shouldUpdateTtl ? expiresAt ?? "never" : updatedRecord?.expiresAt ?? record.expiresAt ?? "never",
+                spa: updatedRecord?.spa ?? record.spa ?? false,
+                validation,
                 usage_hint: "Update succeeded. Present the url field to the user if they need to access the site.",
-                next_action: "Tell the user what changed and include expires_at when TTL was requested.",
+                next_action:
+                  validation.warnings.length > 0
+                    ? "Tell the user what changed, include the url, and mention validation warnings that may affect browser access."
+                    : "Tell the user what changed and include expires_at when TTL was requested.",
               },
               null,
               2

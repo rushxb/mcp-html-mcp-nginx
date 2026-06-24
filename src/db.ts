@@ -20,6 +20,8 @@ export interface SiteRecord {
   updatedAt: string;
   /** ISO-8601 expiration timestamp (optional). */
   expiresAt?: string;
+  /** Whether the site is a single-page application that may need index.html fallback routing. */
+  spa?: boolean;
 }
 
 interface DbData {
